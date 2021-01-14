@@ -1,0 +1,479 @@
+variables
+{
+	global:
+		0: projectedBarrierCD
+		1: particuleBarrierCD
+		2: zaryaBarrierHealth
+		3: zaryaEnergyUnit
+		4: hudSpacebar
+		5: hudCarriageReturn
+
+	player:
+		0: zaryaEnergy
+		1: switchVerif
+		2: particuleBarrierHealth
+		3: particuleBarrierHealthID
+		4: particuleBarrierEffectID
+		5: projectedBarrierTarget
+		6: projectedBarrierHealth
+		7: projectedBarrierHealthID
+		8: projectedBarrierEffectID
+		9: projectedBarrierIsAffectedBy
+		10: projectedBarrierGenerator
+		11: zaryaEnergyHUD
+		12: projectedBarrierLoopVar
+		13: projectedBarrierActivated
+		14: particuleBarrierActivated
+}
+
+rule("○ GLOBAL")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+
+	actions
+	{
+		Global.projectedBarrierCD = 6;
+		Global.particuleBarrierCD = 8;
+		Global.zaryaBarrierHealth = 200;
+		Global.zaryaEnergyUnit = 5;
+		Global.hudCarriageReturn = Custom String(" \r\n \r\n\r\n  \r\n \r\n \r\n \r\n ");
+		Global.hudSpacebar = Custom String(
+			"                                                                                                      ");
+		disabled Global.hudCarriageReturn = Custom String(" ");
+		disabled Global.hudSpacebar = Custom String(" ");
+	}
+}
+
+disabled rule("■■■■■■  SWITCH ■■■■■■")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+}
+
+rule("○ SWITCHING")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	actions
+	{
+		Event Player.switchVerif = Hero Of(Event Player);
+		Wait(0.016, Ignore Condition);
+		Skip If(Hero Of(Event Player) == Event Player.switchVerif, 5);
+		Remove All Health Pools From Player(Event Player);
+		Set Projectile Speed(Event Player, 100);
+		Set Healing Dealt(Event Player, 100);
+		Set Max Health(Event Player, 100);
+		Allow Button(Event Player, Button(Ability 2));
+		If(Hero Of(Event Player) == Hero(Zarya));
+			Set Melee Enabled(Event Player, False);
+		Else;
+			Set Melee Enabled(Event Player, True);
+			Destroy HUD Text(Event Player.zaryaEnergyHUD);
+		End;
+		Loop;
+	}
+}
+
+disabled rule("■■■■■■ ZARYA ■■■■■■")
+{
+	event
+	{
+		Ongoing - Global;
+	}
+}
+
+rule("○ Zarya Spawn")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	conditions
+	{
+		Has Spawned(Event Player) == True;
+	}
+
+	actions
+	{
+		Set Max Health(Event Player, 50);
+		Add Health Pool To Player(Event Player, Health, 100, True, True);
+		Event Player.zaryaEnergy = 0;
+		Disallow Button(Event Player, Button(Ability 1));
+		Disallow Button(Event Player, Button(Ability 2));
+		Wait(0.016, Ignore Condition);
+		Set Ability Cooldown(Event Player, Button(Ability 1), 0);
+		Set Ability Cooldown(Event Player, Button(Ability 2), 0);
+	}
+}
+
+rule("○ Zarya (Energy damage boost : classic version)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	actions
+	{
+		If(Is Button Held(Event Player, Button(Melee)) == True);
+			Set Damage Dealt(Event Player, 100);
+			Set Melee Enabled(Event Player, True);
+			Press Button(Event Player, Button(Melee));
+			Wait(0.250, Ignore Condition);
+			Set Melee Enabled(Event Player, False);
+		End;
+		If(Is Button Held(Event Player, Button(Primary Fire)) == True);
+			Set Damage Dealt(Event Player, 100 + 78.947 * (Event Player.zaryaEnergy / 100));
+		End;
+		End;
+		Set Damage Dealt(Event Player, 100 + Event Player.zaryaEnergy);
+		Wait(0.016, Ignore Condition);
+		Loop;
+	}
+}
+
+rule("└Zarya (Energy loss : -1.6% per second)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	actions
+	{
+		If(Event Player.zaryaEnergy > 0);
+			Wait(0.609, Ignore Condition);
+			Event Player.zaryaEnergy = Event Player.zaryaEnergy - 1;
+		End;
+		Wait(0.016, Ignore Condition);
+		Loop;
+	}
+}
+
+rule("○ Zarya HUD")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	actions
+	{
+		Create HUD Text(Event Player, Null, Null, String("{0} {1}", String("{0} {1}", Global.hudSpacebar, Global.hudSpacebar),
+			Event Player.zaryaEnergy), Left, 0, Color(Aqua), Color(White), Color(Rose), Visible To and String, Default Visibility);
+		Event Player.zaryaEnergyHUD = Last Text ID;
+		Create HUD Text(All Players(All Teams), Null, Null, String("{0} {1} {2}", Global.hudCarriageReturn, Global.hudCarriageReturn,
+			Global.hudCarriageReturn), Left, 0, Color(Aqua), Color(White), Color(White), Visible To and String, Default Visibility);
+	}
+}
+
+rule("○ Zarya Particule Barrier Activation")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	conditions
+	{
+		Is Button Held(Event Player, Button(Ability 1)) == True;
+		Ability Cooldown(Event Player, Button(Ability 1)) == 0;
+	}
+
+	actions
+	{
+		Set Ability 1 Enabled(Event Player, False);
+		Event Player.particuleBarrierActivated = True;
+		Add Health Pool To Player(Event Player, Shields, Global.zaryaBarrierHealth, False, True);
+		Event Player.particuleBarrierHealthID = Last Created Health Pool;
+		Event Player.particuleBarrierHealth = Global.zaryaBarrierHealth;
+		Create Effect(All Players(All Teams), Sphere, Color(White), Event Player, 1, Visible To Position and Radius);
+		Event Player.projectedBarrierEffectID = Last Created Entity;
+		Wait(2, Ignore Condition);
+		Event Player.particuleBarrierActivated = False;
+		Remove Health Pool From Player(Event Player.particuleBarrierHealthID);
+		Event Player.particuleBarrierHealth = 0;
+	}
+}
+
+rule("└Zarya Particule Barrier (Death Immunity + Animation)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	actions
+	{
+		If(Event Player.particuleBarrierHealth > 0);
+			Set Status(Event Player, Null, Unkillable, 9999);
+			Event Player.particuleBarrierEffectID = Last Created Entity;
+		Else;
+			Clear Status(Event Player, Unkillable);
+			Event Player.particuleBarrierHealthID = False;
+			Destroy Effect(Event Player.particuleBarrierEffectID);
+		End;
+		Wait(0.016, Ignore Condition);
+		Loop;
+	}
+}
+
+rule("└Zarya Particule Barrier (CC immunity)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Event Player.particuleBarrierHealth > 0;
+		(Has Status(Event Player, Burning) || Has Status(Event Player, Frozen) || Has Status(Event Player, Stunned)) == True;
+	}
+
+	actions
+	{
+		Clear Status(Event Player, Burning);
+		Clear Status(Event Player, Frozen);
+		Clear Status(Event Player, Stunned);
+	}
+}
+
+rule("└Zarya Particule Barrier (Damage absorption)")
+{
+	event
+	{
+		Player Took Damage;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Event Player.particuleBarrierHealth > 0;
+	}
+
+	actions
+	{
+		If(Event Damage > Event Player.particuleBarrierHealth);
+			Event Player.zaryaEnergy = Event Player.zaryaEnergy + Event Player.particuleBarrierHealth / Global.zaryaEnergyUnit;
+			Heal(Event Player, Null, Event Damage - Event Player.particuleBarrierHealth);
+			Event Player.particuleBarrierHealth = 0;
+			Event Player.particuleBarrierActivated = False;
+		Else;
+			Event Player.zaryaEnergy = Event Player.zaryaEnergy + Event Damage / Global.zaryaEnergyUnit;
+			Event Player.particuleBarrierHealth = Event Player.particuleBarrierHealth - Event Damage;
+		End;
+		If(Event Player.zaryaEnergy > 100);
+			Event Player.zaryaEnergy = 100;
+		End;
+	}
+}
+
+rule("└Zarya Particule Barrier (Cooldown)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	conditions
+	{
+		Event Player.particuleBarrierActivated == False;
+	}
+
+	actions
+	{
+		Set Ability 1 Enabled(Event Player, True);
+		Set Ability Cooldown(Event Player, Button(Ability 1), Global.particuleBarrierCD);
+	}
+}
+
+rule("○ Zarya Projected Barried (Get target + CD verification)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	conditions
+	{
+		Is Button Held(Event Player, Button(Ability 2)) == True;
+		Ability Cooldown(Event Player, Button(Ability 2)) == 0;
+	}
+
+	actions
+	{
+		Set Ability 2 Enabled(Event Player, False);
+		Event Player.projectedBarrierActivated = True;
+		Event Player.projectedBarrierTarget = Player Closest To Reticle(Event Player, Team Of(Event Player));
+		Player Closest To Reticle(Event Player, Team Of(Event Player)).projectedBarrierIsAffectedBy = True;
+		Event Player.projectedBarrierTarget.projectedBarrierGenerator = Event Player;
+		Event Player.projectedBarrierHealth = Global.zaryaBarrierHealth;
+	}
+}
+
+rule("└Zarya Projected Barrier Health Management")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Event Player.projectedBarrierIsAffectedBy == True;
+	}
+
+	actions
+	{
+		Add Health Pool To Player(Event Player, Shields, Global.zaryaBarrierHealth, False, True);
+		Event Player.projectedBarrierHealthID = Last Created Health Pool;
+		Create Effect(All Players(All Teams), Sphere, Color(White), Event Player, 1, Visible To Position and Radius);
+		Event Player.projectedBarrierEffectID = Last Created Entity;
+		Event Player.projectedBarrierLoopVar = Custom String("KILLABLE : NO");
+		Wait(2, Ignore Condition);
+		Remove Health Pool From Player(Event Player.projectedBarrierHealthID);
+		Event Player.projectedBarrierGenerator.projectedBarrierActivated = False;
+		Event Player.projectedBarrierGenerator.projectedBarrierHealth = 0;
+		Event Player.projectedBarrierIsAffectedBy = False;
+		Event Player.projectedBarrierLoopVar = Custom String("KILLABLE : YES");
+		Wait(0.032, Ignore Condition);
+		Event Player.projectedBarrierLoopVar = Custom String("KILLABLE : STAND-BY");
+	}
+}
+
+rule("└Zarya Projected Barrier (Death Immunity + Animation)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	actions
+	{
+		If(Event Player.projectedBarrierGenerator.projectedBarrierHealth > 0);
+			Set Status(Event Player, Null, Unkillable, 9999);
+			Event Player.projectedBarrierEffectID = Last Created Entity;
+		Else;
+			If(Event Player.projectedBarrierLoopVar == Custom String("KILLABLE : YES"));
+				Clear Status(Event Player, Unkillable);
+				Event Player.projectedBarrierHealthID = False;
+				Destroy Effect(Event Player.projectedBarrierEffectID);
+			End;
+		End;
+		Wait(0.016, Ignore Condition);
+		Loop;
+	}
+}
+
+rule("└Zarya Projected Barrier (CC immunity)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Event Player.projectedBarrierGenerator.projectedBarrierHealth > 0;
+		(Has Status(Event Player, Burning) || Has Status(Event Player, Frozen) || Has Status(Event Player, Stunned)) == True;
+	}
+
+	actions
+	{
+		Clear Status(Event Player, Burning);
+		Clear Status(Event Player, Frozen);
+		Clear Status(Event Player, Stunned);
+	}
+}
+
+rule("└Zarya Projected Barrier (Damage absorption)")
+{
+	event
+	{
+		Player Took Damage;
+		All;
+		All;
+	}
+
+	conditions
+	{
+		Event Player.projectedBarrierGenerator.projectedBarrierHealth > 0;
+	}
+
+	actions
+	{
+		If(Event Damage > Event Player.projectedBarrierGenerator.projectedBarrierHealth);
+			Event Player.projectedBarrierLoopVar = Custom String("KILLABLE : YES");
+			Event Player.projectedBarrierGenerator.zaryaEnergy = Event Player.projectedBarrierGenerator.zaryaEnergy + Event Player.projectedBarrierGenerator.projectedBarrierHealth / Global.zaryaEnergyUnit;
+			Heal(Event Player, Null, Event Damage - Event Player.projectedBarrierGenerator.projectedBarrierHealth);
+			Event Player.projectedBarrierGenerator.projectedBarrierHealth = 0;
+			Wait(0.032, Ignore Condition);
+			Event Player.projectedBarrierGenerator.projectedBarrierActivated = False;
+			Event Player.projectedBarrierLoopVar = Custom String("KILLABLE : STANDBY");
+		Else;
+			Event Player.projectedBarrierGenerator.zaryaEnergy = Event Player.projectedBarrierGenerator.zaryaEnergy + Event Damage / 5;
+			Event Player.projectedBarrierGenerator.projectedBarrierHealth = Event Player.projectedBarrierGenerator.projectedBarrierHealth - Event Damage;
+		End;
+		If(Event Player.projectedBarrierGenerator.zaryaEnergy > 100);
+			Event Player.projectedBarrierGenerator.zaryaEnergy = 100;
+		End;
+	}
+}
+
+rule("└Zarya Projected Barrier (Cooldown)")
+{
+	event
+	{
+		Ongoing - Each Player;
+		All;
+		Zarya;
+	}
+
+	conditions
+	{
+		Event Player.projectedBarrierActivated == False;
+	}
+
+	actions
+	{
+		Set Ability 2 Enabled(Event Player, True);
+		Set Ability Cooldown(Event Player, Button(Ability 2), Global.projectedBarrierCD);
+	}
+}
